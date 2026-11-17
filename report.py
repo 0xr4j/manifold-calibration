@@ -24,19 +24,20 @@ def img(name):
 def slope_reading(r):
     lo, hi = r["slope_ci"]
     if lo <= 1 <= hi:
-        return "consistent with 1, so prices were neither too extreme nor too timid overall"
+        return "consistent with 1: prices were neither too extreme nor too timid overall"
     if lo > 1:
-        return ("above 1: outcomes were more extreme than prices suggested, so prices were too timid "
-                "and a price of 20% should have been lower and 80% higher")
-    return ("below 1: prices were too extreme, so markets were overconfident and long shots won "
-            "more often than their prices implied")
+        return ("above 1: outcomes were more extreme than prices suggested, so prices were too timid, "
+                "with favourites underpriced and long shots overpriced")
+    return ("below 1: prices were too extreme, so long shots won more often than their prices implied "
+            "and heavy favourites less often")
 
 
 def intercept_reading(r):
     lo, hi = r["intercept_ci"]
     if lo <= 0 <= hi:
         return "no significant tilt toward YES or NO"
-    return ("YES resolved more often than priced" if lo > 0 else "YES resolved less often than priced")
+    return "a tilt toward YES: YES resolved more often than priced" if lo > 0 else \
+        "a tilt toward NO: YES resolved less often than priced"
 
 
 def table(rows, cols):
@@ -46,23 +47,22 @@ def table(rows, cols):
 
 
 def main():
-    mid, d30, d7, d1 = H["mid"], H["d30"], H["d7"], H["d1"]
-    liq = R["liquidity_mid"]
+    o7, mid, d1 = H["o7"], H["mid"], H["d1"]
+    liq = R["liquidity_headline"]
     early = R["early_resolution"]
-    fav = [r for r in R["favourites_mid"] if r["n"] >= 30]
+    fav = [r for r in R["favourites_headline"] if r["n"] >= 30]
     worst = min(fav, key=lambda r: r["yes_rate"] - r["mean_price"])
     best = max(fav, key=lambda r: r["yes_rate"] - r["mean_price"])
-    e = R.get("d1_by_early", {})
+    e = R["d1_by_early"]
 
-    horizon_rows = [("Halfway through life", mid), ("30 days before", d30), ("7 days before", d7),
-                    ("1 day before", d1)]
+    horizon_rows = [("7 days after opening", H["o7"]), ("Halfway through life", mid), ("30 days before end", H["d30"]),
+                    ("7 days before end", H["d7"]), ("1 day before end", d1)]
     horizon_table = table(horizon_rows, [
         ("Price taken", lambda r: r[0]),
         ("Markets", lambda r: f"{r[1]['n']:,}"),
         ("Brier", lambda r: f"{r[1]['brier']:.3f}"),
         ("Base-rate Brier", lambda r: f"{r[1]['brier_base_rate']:.3f}"),
         ("Skill vs base rate", lambda r: pct(r[1]["skill_vs_base_rate"], 0)),
-        ("Log loss", lambda r: f"{r[1]['log_loss']:.3f}"),
         ("Slope", lambda r: f"{r[1]['slope']:.2f}"),
     ])
     liq_table = table(list(liq.items()), [
@@ -79,13 +79,19 @@ def main():
         ("Won", lambda r: pct(r["yes_rate"])),
         ("95% CI", lambda r: f"{pct(r['ci_low'], 0)}–{pct(r['ci_high'], 0)}"),
     ])
-
     liq_vals = list(liq.values())
-    liq_better = liq_vals[-1]["brier"] < liq_vals[0]["brier"]
-    early_note = ""
-    if "True" in e and "False" in e:
-        early_note = (f" One day out, markets that resolved early scored a Brier of {e['True']['brier']:.3f}, "
-                      f"against {e['False']['brier']:.3f} for markets that ran to their scheduled close.")
+    liq_word = "more" if liq_vals[-1]["brier"] < liq_vals[0]["brier"] else "less"
+    wf = R["walk_forward"]
+    lo, hi = wf["avg_profit_ci"]
+    if lo > 0:
+        wf_reading = "The edge held out of sample, though it would need to survive fees, price impact and real money."
+    elif hi < 0:
+        wf_reading = "It lost money out of sample: the pattern did not persist."
+    else:
+        wf_reading = ("That is not distinguishable from zero, and about the size of a typical 1¢ fee. "
+                      f"The slope learned before {wf['split']} was {wf['fit']['slope']:.2f}; on the later markets it was "
+                      f"{wf['test_period_fit']['slope']:.2f}. The mispricing was real, but its size shifted between periods, "
+                      "so a pricing model has to keep re-learning it rather than fix it once.")
 
     html = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Manifold calibration study</title>
@@ -100,7 +106,8 @@ p {{ margin: 0 0 6pt; text-align: justify; }}
 .figs {{ display: flex; gap: 10pt; align-items: flex-start; }}
 .figs img {{ width: 50%; }}
 img {{ max-width: 100%; }}
-.full img {{ width: 78%; display: block; margin: 0 auto; }}
+.full img {{ width: 62%; display: block; margin: 0 auto; }}
+tr {{ break-inside: avoid; }} table {{ break-inside: auto; }} h2 {{ break-after: avoid; }}
 table {{ border-collapse: collapse; width: 100%; font-size: 9.5pt; margin: 4pt 0 8pt; }}
 th, td {{ border-bottom: 0.5pt solid #ccc; padding: 2.5pt 4pt; text-align: right; }}
 th:first-child, td:first-child {{ text-align: left; }}
@@ -111,63 +118,73 @@ ul {{ margin: 0 0 6pt; padding-left: 14pt; }} li {{ margin-bottom: 2pt; }}
 </style></head><body>
 
 <h1>How well do prediction-market prices predict outcomes?</h1>
-<div class="sub">A calibration study of {R['markets']:,} resolved Manifold markets (created {R['created_range'][0]} – {R['created_range'][1]}) · Raj Jha · code and data: github.com/0xr4j/manifold-calibration</div>
+<div class="sub">A calibration study of {R['markets']:,} resolved Manifold markets (created {R['created_range'][0]} – {R['created_range'][1]}) · Raj Jha ·
+code, data and interactive site: github.com/0xr4j/manifold-calibration</div>
 
-<p class="lead">Halfway through their lives, market prices beat always quoting the base rate by
-<b>{pct(mid['skill_vs_base_rate'], 0)}</b> on Brier score ({mid['brier']:.3f} vs {mid['brier_base_rate']:.3f}).
-The calibration slope was <b>{mid['slope']:.2f}</b> (95% CI {mid['slope_ci'][0]:.2f}–{mid['slope_ci'][1]:.2f}),
-{slope_reading(mid)}; there was {intercept_reading(mid)}.</p>
+<p class="lead">Seven days after opening, market prices beat always quoting the base rate by <b>{pct(o7['skill_vs_base_rate'], 0)}</b> on Brier score
+({o7['brier']:.3f} vs {o7['brier_base_rate']:.3f}, {o7['n']:,} markets). The calibration slope was <b>{o7['slope']:.2f}</b>
+(95% CI {o7['slope_ci'][0]:.2f}–{o7['slope_ci'][1]:.2f}), {slope_reading(o7)}; there was {intercept_reading(o7)}.</p>
 
 <h2>Question</h2>
-<p>An event contract's price is meant to be the probability of the event. If that holds, markets priced at 70% should resolve YES about 70% of the time,
-at every price level and at every point in a market's life. This study checks that against {R['markets']:,} resolved YES/NO markets with at least 20 traders each:
-the {R['markets_by_sample'].get('popular', 0):,} most popular resolved markets and {R['markets_by_sample'].get('smaller', 0):,} smaller recent ones.
-For each market it reads the last traded price before four moments and compares it with the outcome.</p>
+<p>An event contract's price is meant to be the probability of the event. If that holds, markets priced at 70% should resolve YES about 70% of the time.
+This study checks that against {R['markets']:,} resolved YES/NO markets with at least 20 traders each: the {R['markets_by_sample'].get('popular', 0):,} most popular
+resolved markets and {R['markets_by_sample'].get('smaller', 0):,} smaller recent ones. For each market it reads the last traded price before fixed moments and
+compares it with the outcome. The headline moment is <b>7 days after the market opened</b>, because it is the only one a trader could choose in advance (see "Why the moment matters").</p>
 
-<div class="figs">{img('calibration_mid.png')}{img('favourites_mid.png')}</div>
+<div class="figs">{img('calibration_o7.png')}{img('favourites_o7.png')}</div>
 <p class="small">Left: each dot is a price bin, with the share of its markets that resolved YES and a 95% Wilson interval; the histogram shows where prices sat.
 Right: every market folded onto its favourite. A dot below zero means favourites at that price won less often than their price said.</p>
 
 <h2>Favourites and long shots</h2>
-<p>Among price bands with at least 30 markets, favourites priced {pct(worst['bin_low'], 0)}–{pct(worst['bin_high'], 0)} won
-{pct(worst['yes_rate'])} of the time against an average price of {pct(worst['mean_price'])}, the largest shortfall.
-Favourites priced {pct(best['bin_low'], 0)}–{pct(best['bin_high'], 0)} won {pct(best['yes_rate'])} against {pct(best['mean_price'])}.</p>
+<p>Among price bands with at least 30 markets, favourites priced {pct(worst['bin_low'], 0)}–{pct(worst['bin_high'], 0)} won {pct(worst['yes_rate'])} of the time
+against an average price of {pct(worst['mean_price'])}, the largest shortfall. Favourites priced {pct(best['bin_low'], 0)}–{pct(best['bin_high'], 0)} won
+{pct(best['yes_rate'])} against {pct(best['mean_price'])}.</p>
 {fav_table}
 
-<h2 class="pb">Accuracy against time left</h2>
+<h2>Why the moment matters</h2>
 {horizon_table}
 <div class="full">{img('brier_by_horizon.png')}</div>
-<p>Accuracy improves sharply as resolution nears, but part of the late improvement is look-ahead rather than skill.
-{pct(early['yes'], 0)} of YES markets resolved more than a day before their scheduled close, against {pct(early['no'], 0)} of NO markets:
-"will X happen by date" markets resolve as soon as X happens, so a price taken a day before resolution often already reflects the answer.{early_note}
-This is why the headline uses the halfway price.</p>
+<p>Prices look far more accurate close to resolution, but every moment except the first is counted back from the resolution time, which no trader knows in advance.
+That timing also depends on the outcome: <b>{pct(early['yes'], 0)}</b> of YES markets were resolved while trading was still open, against <b>{pct(early['no'], 0)}</b>
+of NO markets, because "will X happen by a date" resolves YES as soon as X happens and NO only at the deadline. A day before resolution, markets that ran to their
+deadline scored a Brier of {e['False']['brier']:.3f} (with a day left, the answer was usually settled; only {pct(R['d1_ran_to_close_after_close'], 0)} of these prices were
+read after trading had closed), while markets resolved while still open scored {e['True']['brier']:.3f}, often because the event itself was a surprise.
+Late accuracy therefore says as much about how a question resolves as about forecasting skill, and a backtest keyed to it would trade on information it could not have had.</p>
+<p class="small">Manifold moves a market's close time to the moment it resolves when an open market is resolved, so a close within a minute of resolution marks a
+market resolved while trading was still open. This includes early resolutions and some resolved on their deadline day before trading closed.</p>
 
 <h2>Liquidity</h2>
 {liq_table}
-<p>Markets with the most traders were {'more' if liq_better else 'less'} accurate halfway through their lives than markets with the fewest
-(Brier {liq_vals[-1]['brier']:.3f} vs {liq_vals[0]['brier']:.3f}). The most-traded third comes mostly from the popular sample, which spans more years,
-so trader count and time period are partly confounded.</p>
+<p>Seven days after opening, markets with the most traders were {liq_word} accurate than markets with the fewest
+(Brier {liq_vals[-1]['brier']:.3f} vs {liq_vals[0]['brier']:.3f}; slope {liq_vals[-1]['slope']:.2f} vs {liq_vals[0]['slope']:.2f}). More traders did not mean
+better prices here. The most-traded third comes mostly from the popular sample, which spans more years and attracts long-running, contested questions,
+so trader count, question type and time period are confounded; this is a description, not evidence that liquidity hurts accuracy.</p>
 
 <h2>What this means for pricing</h2>
 <ul>
-<li><b>The last trade is a usable prior, not an answer.</b> Halfway through, prices removed {pct(mid['skill_vs_base_rate'], 0)} of the base rate's Brier error.
-A pricing system can start from the market price and look for systematic adjustments, rather than rebuilding every forecast from scratch.</li>
-<li><b>Correct for the shape of the error, not just its size.</b> A calibration slope of {mid['slope']:.2f} gives a one-line re-mapping:
-fair probability = sigmoid({mid['intercept']:.2f} + {mid['slope']:.2f} × logit(price)). It must be re-fitted on fresh, real-money data before it is trusted.</li>
-<li><b>Measure skill where the answer is not yet known.</b> Late prices look excellent partly because early-resolving markets leak the outcome.
-Backtests of event-contract strategies need the same care, or they will credit a model for information it could not have had.</li>
+<li><b>The market price is a usable prior, not an answer.</b> A week in, prices removed {pct(o7['skill_vs_base_rate'], 0)} of the base rate's Brier error.
+A pricing system can start from the market and look for systematic adjustments.</li>
+<li><b>A real mispricing is not yet a tradable edge.</b> A calibration slope of {o7['slope']:.2f} suggests a one-line re-mapping,
+fair probability = sigmoid(a + b × logit(price)). Fitted only on the {wf['train_markets']:,} markets resolved before {wf['split']} and applied to the
+{wf['test_markets']:,} prices read after it (buying whichever side the correction favoured by at least {pct(wf['min_edge'], 0)}), it made
+<b>{100 * wf['avg_profit']:+.1f}¢</b> per contract over {wf['trades']:,} trades (95% CI {100 * wf['avg_profit_ci'][0]:+.1f}¢ to {100 * wf['avg_profit_ci'][1]:+.1f}¢), before fees.
+{wf_reading}</li>
+<li><b>Only test on moments a trader could have chosen.</b> Horizons counted back from resolution leak the outcome through its timing. The interactive site's backtest
+trades only at 7 days after opening and learns its correction only from markets already resolved.</li>
 </ul>
 
 <h2>Limits</h2>
 <ul class="small">
 <li>Manifold uses play money (mana), so incentives are weaker than on Kalshi or Polymarket, which were not reachable from the network this was run on. All {R['markets']:,} markets traded in mana.</li>
-<li>The popular sample favours heavily traded markets and the smaller sample favours recent ones. Creators resolve their own markets.</li>
-<li>Prices are last trades, not mid-quotes. Markets with no trade before a moment were left out of that horizon:
-{mid['dropped_no_price']} halfway, {d30['dropped_no_price']} at 30 days, {d7['dropped_no_price']} at 7 days and {d1['dropped_no_price']} at 1 day.</li>
+<li>Markets were selected using their final popularity and trader count, which are not known 7 days in. A market must still be open 7 days in to have a price then
+({o7['dropped_no_price']:,} resolved sooner and are excluded at that moment). Creators resolve their own markets.</li>
+<li>Prices are last trades, not quotes. A market is left out of a moment that came before it opened or before its first trade:
+{mid['dropped_no_price']} halfway, {H['d30']['dropped_no_price']:,} at 30 days before the end (mostly markets that lived less than 30 days),
+{H['d7']['dropped_no_price']} at 7 days and {d1['dropped_no_price']} at 1 day.</li>
 </ul>
 <p class="small">Method: Brier score and log loss against a base-rate forecaster; Wilson intervals per price bin; calibration slope and intercept from a logistic
-regression of the outcome on logit(price), with 1,000 bootstrap resamples of markets; Murphy decomposition (halfway: reliability {mid['reliability']:.4f},
-resolution {mid['resolution']:.4f}, uncertainty {mid['uncertainty']:.4f}). Code: fetch.py, metrics.py, analyze.py, report.py, with tests on synthetic data.
+regression of the outcome on logit(price), with 1,000 bootstrap resamples of markets; Murphy decomposition (7 days after opening: reliability {o7['reliability']:.4f},
+resolution {o7['resolution']:.4f}, uncertainty {o7['uncertainty']:.4f}). Code: fetch.py, metrics.py, analyze.py, report.py, with tests on synthetic data.
 Every number here is generated from the data.</p>
 </body></html>"""
     out = ROOT / "report"

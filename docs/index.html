@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Is a Price a Probability?</title>
+<meta name="description" content="An interactive calibration study of resolved Manifold prediction markets, with simulators for calibration and a simple trading backtest.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231f2a44'/><path d='M7 25 L25 7' stroke='%23f4f5f8' stroke-width='2.5' stroke-dasharray='3 3'/><circle cx='11' cy='19' r='3' fill='%23e8a33d'/><circle cx='21' cy='12' r='3' fill='%23e8a33d'/></svg>">
+<style>
+  :root {
+    --bg: #fbfaf7; --surface: #ffffff; --ink: #1c2333; --ink-2: #4a5468; --muted: #8a93a6;
+    --line: #e4e2dc; --accent: #c2410c; --accent-2: #2f5bd3; --good: #15803d; --bad: #b91c1c;
+    --dot: #1c2333; --band: rgba(47, 91, 211, 0.10); --code: #f1efe9;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12151c; --surface: #1a1e27; --ink: #e8eaf0; --ink-2: #b4bac8; --muted: #7d869a;
+      --line: #2b313e; --accent: #f08a4b; --accent-2: #7aa2ff; --good: #4ade80; --bad: #f87171;
+      --dot: #e8eaf0; --band: rgba(122, 162, 255, 0.14); --code: #222734;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12151c; --surface: #1a1e27; --ink: #e8eaf0; --ink-2: #b4bac8; --muted: #7d869a;
+    --line: #2b313e; --accent: #f08a4b; --accent-2: #7aa2ff; --good: #4ade80; --bad: #f87171;
+    --dot: #e8eaf0; --band: rgba(122, 162, 255, 0.14); --code: #222734;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.6 var(--serif); }
+  a { color: var(--accent-2); }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+  nav { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent);
+        backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); font-family: var(--sans); font-size: 14px; }
+  nav .wrap { display: flex; gap: 18px; align-items: center; height: 48px; overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
+  nav .wrap::-webkit-scrollbar { display: none; }
+  nav a { color: var(--ink-2); text-decoration: none; }
+  nav a:hover { color: var(--ink); }
+  nav .brand { font-weight: 650; color: var(--ink); margin-right: auto; }
+  header.hero { padding: 64px 0 32px; }
+  .kicker { font-family: var(--sans); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+  h1 { font-size: clamp(34px, 6vw, 56px); line-height: 1.05; margin: 10px 0 16px; letter-spacing: -0.01em; }
+  h2 { font-size: clamp(26px, 4vw, 34px); line-height: 1.15; margin: 0 0 8px; }
+  h3 { font-family: var(--sans); font-size: 15px; margin: 0 0 6px; }
+  .lede { font-size: 20px; color: var(--ink-2); max-width: 720px; }
+  section { padding: 48px 0; border-top: 1px solid var(--line); }
+  .section-lede { color: var(--ink-2); max-width: 720px; margin: 0 0 20px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 28px 0 8px; }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .stat .v { font-family: var(--sans); font-size: 30px; font-weight: 650; letter-spacing: -0.02em; }
+  .stat .l { font-family: var(--sans); font-size: 13px; color: var(--ink-2); line-height: 1.4; }
+  .links { font-family: var(--sans); font-size: 14px; display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+  .btn { display: inline-block; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 7px 12px;
+         border-radius: 8px; text-decoration: none; cursor: pointer; font: 500 14px var(--sans); }
+  .btn:hover { border-color: var(--ink-2); }
+  .btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  .grid2 { display: grid; grid-template-columns: 290px 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+  .controls { font-family: var(--sans); font-size: 14px; display: grid; gap: 14px; }
+  .controls label { display: grid; gap: 4px; color: var(--ink-2); }
+  .controls .row { display: flex; justify-content: space-between; gap: 8px; }
+  .controls output { font-family: var(--mono); color: var(--ink); }
+  input[type=range] { width: 100%; accent-color: var(--accent-2); }
+  select { font: 14px var(--sans); padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex-wrap: wrap; }
+  .seg button { font: 500 13px var(--sans); border: 0; background: transparent; color: var(--ink-2); padding: 7px 11px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+  .check { display: flex !important; grid-template-columns: none; align-items: center; gap: 8px; color: var(--ink) !important; }
+  .readout { font-family: var(--sans); display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 12px; }
+  .readout div { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .readout b { display: block; font-size: 20px; font-weight: 650; }
+  .readout span { font-size: 12px; color: var(--ink-2); }
+  .note { font-family: var(--sans); font-size: 14px; color: var(--ink-2); background: var(--bg); border-left: 3px solid var(--accent);
+          padding: 10px 12px; border-radius: 4px; margin-top: 12px; }
+  .callout { font-size: 18px; border-left: 3px solid var(--accent-2); padding: 4px 0 4px 14px; margin: 18px 0; }
+  svg.chart { width: 100%; height: auto; display: block; font-family: var(--sans); }
+  svg .axis line, svg .axis path { stroke: var(--line); }
+  svg .axis text { fill: var(--muted); font-size: 12px; }
+  svg .label { fill: var(--ink-2); font-size: 12px; }
+  svg .diag { stroke: var(--muted); stroke-dasharray: 5 4; }
+  svg .grid { stroke: var(--line); }
+  .legend { font-family: var(--sans); font-size: 12px; color: var(--ink-2); display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+  table { width: 100%; border-collapse: collapse; font-family: var(--sans); font-size: 14px; }
+  th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--ink-2); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  td.num { text-align: right; font-family: var(--mono); white-space: nowrap; }
+  .twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 760px) { .twocol { grid-template-columns: 1fr; } }
+  .formula { font-family: var(--mono); font-size: 14px; background: var(--code); padding: 2px 6px; border-radius: 4px; }
+  .payoff { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; font-family: var(--sans); margin-top: 12px; }
+  .payoff div { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .payoff b { display: block; font-size: 22px; }
+  .payoff span { font-size: 12px; color: var(--ink-2); }
+  .pos { color: var(--good); } .neg { color: var(--bad); }
+  footer { border-top: 1px solid var(--line); padding: 28px 0 48px; font-family: var(--sans); font-size: 14px; color: var(--ink-2); }
+  .loading { font-family: var(--sans); color: var(--muted); }
+  ol.steps { padding-left: 20px; } ol.steps li { margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<nav aria-label="Sections">
+  <div class="wrap">
+    <span class="brand">Is a price a probability?</span>
+    <a href="#contract">Event contracts</a>
+    <a href="#calibration">Calibration simulator</a>
+    <a href="#results">Real markets</a>
+    <a href="#lookahead">Look-ahead trap</a>
+    <a href="#backtest">Strategy backtest</a>
+    <a href="#method">Method</a>
+    <button class="btn" id="theme" type="button" aria-label="Toggle dark mode">◐</button>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker">A calibration study of prediction markets</div>
+    <h1>When a market says 70%, does it happen 70% of the time?</h1>
+    <p class="lede">An event contract pays $1 if something happens and $0 if it doesn't, so its price is meant to be the market's probability.
+      This study checks that claim against <span data-k="markets">thousands of</span> resolved markets on Manifold, and lets you test the ideas yourself.</p>
+    <div class="stats" id="hero-stats" aria-live="polite">
+      <div class="stat"><div class="v" data-k="markets">…</div><div class="l">resolved YES/NO markets, each with at least 20 traders</div></div>
+      <div class="stat"><div class="v" data-k="skill">…</div><div class="l">less Brier error than always quoting the base rate, using the price 7 days after each market opened</div></div>
+      <div class="stat"><div class="v" data-k="slope">…</div><div class="l">calibration slope at the same moment (1.00 is perfect; <span data-k="slope-ci">…</span>)</div></div>
+      <div class="stat"><div class="v" data-k="early">…</div><div class="l">of YES markets resolved while still open, against <span data-k="early-no">…</span> of NO markets</div></div>
+    </div>
+    <div class="links">
+      <a class="btn primary" href="#calibration">Start with the simulator</a>
+      <a class="btn" href="https://github.com/0xr4j/manifold-calibration">Code and data on GitHub</a>
+      <a class="btn" href="https://github.com/0xr4j/manifold-calibration/blob/main/report/report.pdf">Three-page report (PDF)</a>
+    </div>
+  </div>
+</header>
+
+<section id="contract">
+  <div class="wrap">
+    <div class="kicker">Step 1</div>
+    <h2>What an event contract is</h2>
+    <p class="section-lede">You buy a YES contract at the market price. If the event happens it pays $1; if not, it pays nothing.
+      So if you think the true chance is higher than the price, buying YES makes money on average. Move the sliders.</p>
+    <div class="panel grid2">
+      <div class="controls">
+        <label><span class="row">Market price of YES <output id="c-price-o"></output></span>
+          <input type="range" id="c-price" min="1" max="99" value="62"></label>
+        <label><span class="row">Your estimate of the true chance <output id="c-belief-o"></output></span>
+          <input type="range" id="c-belief" min="1" max="99" value="70"></label>
+      </div>
+      <div>
+        <div class="payoff" aria-live="polite">
+          <div><b id="c-cost"></b><span>cost of one YES contract</span></div>
+          <div><b id="c-win"></b><span>profit if it happens</span></div>
+          <div><b id="c-lose"></b><span>loss if it doesn't</span></div>
+          <div><b id="c-ev"></b><span>expected profit per contract, if your estimate is right</span></div>
+        </div>
+        <p class="note" id="c-text"></p>
+      </div>
+    </div>
+    <p class="callout">That is the whole game: <b>profit comes from the gap between the price and the true probability.</b>
+      If prices already equal true probabilities, nobody has an edge. Calibration measures how close they are.</p>
+  </div>
+</section>
+
+<section id="calibration">
+  <div class="wrap">
+    <div class="kicker">Step 2 · Simulator</div>
+    <h2>What calibration looks like</h2>
+    <p class="section-lede">This simulator invents a market whose prices are off in a way you choose, rolls dice for every outcome,
+      and draws the calibration chart a researcher would see. Points on the dashed line mean a price of p comes true p of the time.</p>
+    <div class="panel grid2">
+      <div class="controls">
+        <label><span class="row">Number of markets <output id="s-n-o"></output></span>
+          <input type="range" id="s-n" min="50" max="5000" step="50" value="1000"></label>
+        <label><span class="row">Price extremeness <output id="s-slope-o"></output></span>
+          <input type="range" id="s-slope" min="0.4" max="2.0" step="0.05" value="1.0"></label>
+        <label><span class="row">Tilt toward YES <output id="s-bias-o"></output></span>
+          <input type="range" id="s-bias" min="-1" max="1" step="0.05" value="0"></label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" id="s-roll" type="button">Roll again</button>
+          <button class="btn" id="s-reset" type="button">Perfect market</button>
+          <button class="btn" id="s-over" type="button">Overconfident</button>
+          <button class="btn" id="s-timid" type="button">Too timid</button>
+        </div>
+        <p class="note" style="margin:0">Extremeness 1 means fair prices. Above 1, the true chance is more extreme than the price (prices are too timid).
+          Below 1, prices are too extreme (overconfident), so long shots win more often than their price says.</p>
+      </div>
+      <div>
+        <svg class="chart" id="s-chart" viewBox="0 0 640 420" role="img" aria-label="Simulated calibration chart"></svg>
+        <div class="legend"><span><i style="background:var(--dot)"></i>Observed share YES, with 95% interval</span>
+          <span><i style="background:var(--accent)"></i>True relationship you chose</span></div>
+        <div class="readout" aria-live="polite">
+          <div><b id="s-brier"></b><span>Brier score of the prices</span></div>
+          <div><b id="s-brier-true"></b><span>Brier score of the true chances</span></div>
+          <div><b id="s-fit"></b><span>Fitted slope from the outcomes</span></div>
+        </div>
+        <p class="note" id="s-text"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="results">
+  <div class="wrap">
+    <div class="kicker">Step 3 · Real data</div>
+    <h2>What real markets did</h2>
+    <p class="section-lede">The same chart, built from real Manifold markets. Choose when the price is read and which markets to include.
+      Everything is computed in your browser from the dataset.</p>
+    <div class="panel grid2">
+      <div class="controls">
+        <label>Price taken
+          <span class="seg" id="r-h" role="group" aria-label="Horizon"></span></label>
+        <label>Traders per market
+          <span class="seg" id="r-liq" role="group" aria-label="Liquidity"></span></label>
+        <label class="check"><input type="checkbox" id="r-early"> Leave out markets resolved while still open</label>
+        <p class="note" style="margin:0" id="r-hint"></p>
+      </div>
+      <div>
+        <svg class="chart" id="r-chart" viewBox="0 0 640 470" role="img" aria-label="Calibration of real markets"></svg>
+        <div class="readout" aria-live="polite">
+          <div><b id="r-n"></b><span>markets</span></div>
+          <div><b id="r-brier"></b><span>Brier score (base rate: <span id="r-base"></span>)</span></div>
+          <div><b id="r-skill"></b><span>skill vs base rate</span></div>
+          <div><b id="r-slope"></b><span>calibration slope</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="twocol" style="margin-top:18px">
+      <div class="panel">
+        <h3>Long shots that came in</h3>
+        <p class="note" style="margin:0 0 8px">Priced 10% or lower at the chosen moment, resolved YES. Most-traded first.</p>
+        <table><tbody id="r-upsets-yes"></tbody></table>
+      </div>
+      <div class="panel">
+        <h3>Favourites that lost</h3>
+        <p class="note" style="margin:0 0 8px">Priced 90% or higher at the chosen moment, resolved NO. Most-traded first.</p>
+        <table><tbody id="r-upsets-no"></tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="lookahead">
+  <div class="wrap">
+    <div class="kicker">Step 4</div>
+    <h2>The look-ahead trap</h2>
+    <p class="section-lede">It is tempting to measure prices "a day before resolution". But nobody knows in advance when a market will resolve,
+      and the timing depends on the answer: questions like "will X happen by a date" resolve YES the moment X happens, while NO waits for the deadline.
+      So any moment counted back from resolution quietly uses the outcome. A backtest built on it trades on information no trader had.
+      That is why the headline numbers and the strategy backtest use the price 7 days after a market opened, a moment anyone could pick in advance.</p>
+    <div class="twocol">
+      <div class="panel">
+        <h3>Brier score by when the price is read</h3>
+        <svg class="chart" id="l-chart" viewBox="0 0 640 360" role="img" aria-label="Brier score by horizon"></svg>
+        <div class="legend"><span><i style="background:var(--accent-2)"></i>All markets</span>
+          <span><i style="background:var(--accent)"></i>Only markets that ran to their deadline</span></div>
+      </div>
+      <div class="panel">
+        <h3>Who resolves early?</h3>
+        <svg class="chart" id="l-early" viewBox="0 0 640 360" role="img" aria-label="Early resolution by outcome"></svg>
+        <p class="note" id="l-text"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="backtest">
+  <div class="wrap">
+    <div class="kicker">Step 5 · Simulator</div>
+    <h2>Backtest a simple strategy</h2>
+    <p class="section-lede">If prices are off in a predictable way, a trader can profit. Try two kinds of rule on the real data.
+      Each trade buys one contract at the price 7 days after the market opened, and is settled at $1 or $0.</p>
+    <div class="panel grid2">
+      <div class="controls">
+        <label>Rule
+          <span class="seg" id="b-mode" role="group" aria-label="Strategy"></span></label>
+        <div id="b-band-controls" class="controls">
+          <label>Side
+            <span class="seg" id="b-side" role="group" aria-label="Side"></span></label>
+          <label><span class="row">Trade when YES price is at least <output id="b-lo-o"></output></span>
+            <input type="range" id="b-lo" min="1" max="99" value="1"></label>
+          <label><span class="row">and at most <output id="b-hi-o"></output></span>
+            <input type="range" id="b-hi" min="1" max="99" value="10"></label>
+        </div>
+        <div id="b-fit-controls" class="controls" hidden>
+          <label><span class="row">Minimum edge to trade <output id="b-edge-o"></output></span>
+            <input type="range" id="b-edge" min="0" max="20" value="3"></label>
+          <p class="note" style="margin:0" id="b-fit-text"></p>
+        </div>
+        <label><span class="row">Fee per contract <output id="b-fee-o"></output></span>
+          <input type="range" id="b-fee" min="0" max="5" step="0.5" value="1"></label>
+      </div>
+      <div>
+        <svg class="chart" id="b-chart" viewBox="0 0 640 360" role="img" aria-label="Cumulative profit"></svg>
+        <div class="readout" aria-live="polite">
+          <div><b id="b-n"></b><span>trades</span></div>
+          <div><b id="b-hit"></b><span>trades that won</span></div>
+          <div><b id="b-avg"></b><span>average profit per contract (95% interval)</span></div>
+          <div><b id="b-roi"></b><span>return on money staked</span></div>
+        </div>
+        <p class="note">Read this as a lesson, not a money machine. Manifold uses play money, and buying moves an automated market maker's price
+          against you. The price-band rule is chosen after seeing the data. The fitted rule is fairer: it learns only from markets already
+          resolved on the split date and trades only after it. Two biases remain. Markets were picked using their final trader count, which
+          is unknown on day 7. And a market must still be open on day 7 to be traded, which slightly favours NO (that one is fair: you would see it).</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="method">
+  <div class="wrap">
+    <div class="kicker">Method</div>
+    <h2>How the study works</h2>
+    <ol class="steps">
+      <li><b>Markets.</b> Resolved YES/NO markets from the public Manifold API, each with at least 20 traders: the most popular resolved markets
+        plus a sample of smaller recent ones. Markets resolved to a percentage or cancelled are excluded.</li>
+      <li><b>Prices.</b> For each market, the probability right after the last trade strictly before five moments: 7 days after it opened,
+        halfway through its life, and 30, 7 and 1 days before it resolved. Only the first could be chosen in advance, so it is the headline.
+        Every returned trade is checked to be earlier than the moment asked for.</li>
+      <li><b>Backtest.</b> The fitted rule is walk-forward: on a split date it learns only from markets already resolved, then trades only
+        prices read after that date.</li>
+      <li><b>Scores.</b> Brier score <span class="formula">mean((price − outcome)²)</span> against a forecaster that always quotes the base rate;
+        95% Wilson intervals per price bin; and a calibration slope from a logistic regression of the outcome on
+        <span class="formula">logit(price)</span>.</li>
+      <li><b>Limits.</b> Manifold trades play money, creators resolve their own markets, prices are last trades rather than quotes, and the popular
+        sample leans toward heavily traded markets. Kalshi and Polymarket were not reachable from the network this was run on.</li>
+    </ol>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">Built by Raj Jha · <a href="https://github.com/0xr4j/manifold-calibration">Code, data and report</a> ·
+    Data from the public <a href="https://docs.manifold.markets/api">Manifold API</a> · <span id="f-range"></span></div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

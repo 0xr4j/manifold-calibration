@@ -28,9 +28,13 @@ SMALL_SAMPLE_SIZE = 2000    # how many smaller, recent markets to add to the pop
 REQUESTS_PER_SECOND = 6     # Manifold allows 500 requests per minute per IP
 
 # Moments at which we read the market price.
-#   mid  = halfway between creation and resolution (the headline horizon)
+#   o7   = 7 days after the market opened. The only horizon a trader could know in advance,
+#          so it is the one used for backtests.
+#   mid  = halfway between creation and resolution
 #   d30 / d7 / d1 = that many days before resolution
-HORIZONS = ["mid", "d30", "d7", "d1"]
+# mid and dN depend on when the market resolved, which a trader cannot know at the time and
+# which depends on the outcome (YES markets often resolve early). See the report.
+HORIZONS = ["o7", "mid", "d30", "d7", "d1"]
 
 WORKERS = 16                # requests in flight at once; each takes a few seconds to answer
 
@@ -138,6 +142,10 @@ def fetch_markets():
 def horizon_time(m, horizon):
     if horizon == "mid":
         return m["created"] + (m["resolved"] - m["created"]) // 2
+    if horizon.startswith("o"):
+        t = m["created"] + int(horizon[1:]) * DAY_MS
+        # Only defined if the market was still unresolved at that moment.
+        return t if t < m["resolved"] else m["created"]
     days = int(horizon[1:])
     return m["resolved"] - days * DAY_MS
 
