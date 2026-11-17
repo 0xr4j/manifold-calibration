@@ -168,7 +168,7 @@ Backtests of event-contract strategies need the same care, or they will credit a
 <p class="small">Method: Brier score and log loss against a base-rate forecaster; Wilson intervals per price bin; calibration slope and intercept from a logistic
 regression of the outcome on logit(price), with 1,000 bootstrap resamples of markets; Murphy decomposition (halfway: reliability {mid['reliability']:.4f},
 resolution {mid['resolution']:.4f}, uncertainty {mid['uncertainty']:.4f}). Code: fetch.py, metrics.py, analyze.py, report.py, with tests on synthetic data.
-I used an AI coding assistant (Claude) to help write the code; the design and conclusions are mine, and every number here is generated from the data.</p>
+Every number here is generated from the data.</p>
 </body></html>"""
     out = ROOT / "report"
     out.mkdir(exist_ok=True)
